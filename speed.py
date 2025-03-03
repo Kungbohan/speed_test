@@ -6,6 +6,10 @@ import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 import time
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
+
+import sys
+print("Using Python executable:", sys.executable)
+
 from torchvision.models import vit_b_16
 
 class RandomImageDataset(Dataset):
@@ -40,11 +44,14 @@ def main():
     )
     parser.add_argument("--threads", type=int, default=4, help="Number of CPU threads to use")
     parser.add_argument("--iter", type=int, default=2, help="Number of iterations to run")
+    parser.add_argument("--gpu", action = 'store_true', help="Use GPU")
     args = parser.parse_args()
     
     print(f"Using Threads: {args.threads}, Rank={rank}, World_size={world_size}")
     torch.set_num_threads(args.threads)
     torch.set_num_interop_threads(args.threads)
+    device = torch.device("cuda" if args.gpu else "cpu")
+    print(f"=== Using device: {device} ===")
     
     # Report OS CPU count for reference.
     cpu_count = os.cpu_count()
@@ -58,7 +65,7 @@ def main():
 
     # Create the ViT model and wrap it in DDP.
     model = vit_b_16(weights=None)  # Using untrained ViT for demo.
-    model = model.to("cpu")
+    model = model.to(device)
     ddp_model = DDP(model)
 
     # Create a random dataset and use DistributedSampler.
@@ -81,6 +88,8 @@ def main():
 
     for _ in range(num_iters):
         for images, labels in dataloader:
+            images = images.to(device)
+            labels = labels.to(device)
             optimizer.zero_grad()
             
             # Measure forward pass time.
